@@ -9,8 +9,14 @@ readme = "README.md"
 python = "^3.12"
 fastapi = "^0.112.0"
 uvicorn = "^0.30.5"
+sqlalchemy = "^2.0.31"
+psycopg2-binary = "^2.9.9"
+requests = "^2.32.3"
+feedparser = "^6.0.11"
 
+[tool.poetry.dev-dependencies]
+pytest = "^8.3.2"
 
 [build-system]
-requires = ["poetry-core"]
+requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
