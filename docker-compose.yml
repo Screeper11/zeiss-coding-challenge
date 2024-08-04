@@ -1,12 +1,23 @@
 services:
   api:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
     ports:
       - "8000:8000"
     environment:
       - DATABASE_URL=postgresql://user:password@db/arxivdb
     depends_on:
       - db
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "5001:5001"
+    depends_on:
+      - api
 
   db:
     image: postgres:13
