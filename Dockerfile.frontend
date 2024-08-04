@@ -5,13 +5,13 @@ RUN pip install poetry
 
 WORKDIR /app
 
-# Copy poetry files
+# Copy poetry files and install dependencies
 COPY pyproject.toml poetry.lock* ./
-
-# Install dependencies
 RUN poetry config virtualenvs.create false \
   && poetry install --no-dev --no-interaction --no-ansi
 
+# Copy application
+COPY assets ./
 COPY frontend.py .
 
 CMD ["python", "frontend.py"]
