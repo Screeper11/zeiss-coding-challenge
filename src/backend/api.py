@@ -1,21 +1,22 @@
 import logging
+import os
 from datetime import datetime, timezone
 from typing import List, Optional
 
 import feedparser
 import requests
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker, relationship, declarative_base
 
-from config import settings
-
-logging.basicConfig(level=settings.LOG_LEVEL)
+logging.basicConfig(level="INFO")
 logger = logging.getLogger(__name__)
+load_dotenv()
 
-engine = create_engine(settings.DATABASE_URL)
+engine = create_engine(os.getenv("DATABASE_URL", "postgresql://user:password@db/arxivdb"))
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -86,7 +87,7 @@ def search_arxiv(author: str = "", title: str = "", journal: str = "", max_resul
         raise ValueError("At least one of author, title, or journal must be provided")
 
     query = "+AND+".join(query_parts)
-    url = f"{settings.ARXIV_API_URL}?search_query={query}&start=0&max_results={max_results}&sortBy=relevance&sortOrder=descending"
+    url = f"{os.getenv('ARXIV_API_URL', 'https://export.arxiv.org/api/query')}?search_query={query}&start=0&max_results={max_results}&sortBy=relevance&sortOrder=descending"
 
     logger.info(f"Querying arXiv API with URL: {url}")
     response = requests.get(url)
@@ -213,4 +214,4 @@ async def results_endpoint(
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host=settings.BACKEND_API_HOST, port=settings.BACKEND_API_PORT)
+    uvicorn.run(app, host=os.getenv("BACKEND_API_HOST", "0.0.0.0"), port=int(os.getenv("BACKEND_API_PORT", "8000")))

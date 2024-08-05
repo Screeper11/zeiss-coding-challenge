@@ -12,7 +12,7 @@ RUN poetry install --no-dev --no-interaction --no-ansi
 
 # Copy application files
 COPY src/backend/api.py .
-COPY config.py .
+COPY .env .
 
 # Set permissions
 RUN chown -R appuser:appuser /app

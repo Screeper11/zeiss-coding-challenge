@@ -14,7 +14,7 @@ RUN poetry install --no-dev --no-interaction --no-ansi
 COPY src/frontend/frontend.py .
 COPY src/frontend/assets ./assets
 COPY src/frontend/assets/favicon.ico .
-COPY config.py .
+COPY .env .
 
 # Set permissions
 RUN chown -R appuser:appuser /app
