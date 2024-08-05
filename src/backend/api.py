@@ -1,22 +1,21 @@
-import os
 import logging
 from datetime import datetime, timezone
 from typing import List, Optional
-from fastapi import FastAPI, HTTPException, Query
-from sqlalchemy import create_engine, Column, Integer, String, DateTime
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
-from pydantic import BaseModel
-import requests
-import feedparser
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
+import feedparser
+import requests
+from fastapi import FastAPI, HTTPException, Query
+from pydantic import BaseModel
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import sessionmaker, relationship, declarative_base
+
+from config import settings
+
+logging.basicConfig(level=settings.LOG_LEVEL)
 logger = logging.getLogger(__name__)
 
-# Database setup
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@db/arxivdb")
-engine = create_engine(DATABASE_URL)
+engine = create_engine(settings.DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -30,20 +29,28 @@ class ArxivQuery(Base):
     status = Column(Integer)
     num_results = Column(Integer)
 
+    results = relationship("ArxivResult", back_populates="query")
+
 
 class ArxivResult(Base):
     __tablename__ = "arxiv_results"
 
     id = Column(Integer, primary_key=True, index=True)
-    query_id = Column(Integer, index=True)
+    query_id = Column(Integer, ForeignKey('arxiv_queries.id'), index=True)
     author = Column(String)
     title = Column(String)
     journal = Column(String)
 
+    query = relationship("ArxivQuery", back_populates="results")
+
 
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI()
+app = FastAPI(
+    title="arXiv API",
+    description="An API for searching and storing arXiv papers",
+    version="1.0.0"
+)
 
 
 class QueryResponse(BaseModel):
@@ -79,7 +86,7 @@ def search_arxiv(author: str = "", title: str = "", journal: str = "", max_resul
         raise ValueError("At least one of author, title, or journal must be provided")
 
     query = "+AND+".join(query_parts)
-    url = f"https://export.arxiv.org/api/query?search_query={query}&start=0&max_results={max_results}&sortBy=relevance&sortOrder=descending"
+    url = f"{settings.ARXIV_API_URL}?search_query={query}&start=0&max_results={max_results}&sortBy=relevance&sortOrder=descending"
 
     logger.info(f"Querying arXiv API with URL: {url}")
     response = requests.get(url)
@@ -92,9 +99,21 @@ def search_arxiv(author: str = "", title: str = "", journal: str = "", max_resul
     return feed, response
 
 
-@app.post("/arxiv")
+@app.post("/arxiv", response_model=dict, tags=["arXiv"])
 async def arxiv_endpoint(params: ArxivSearchParams):
+    """
+    Search arXiv and store results in the database.
+
+    - **author**: Author name to search for
+    - **title**: Title to search for
+    - **journal**: Journal to search for
+    - **max_results**: Maximum number of results to return (default: 8)
+    """
     logger.info(f"Received arXiv request: {params}")
+
+    if not any([params.author, params.title, params.journal]):
+        raise HTTPException(status_code=400, detail="At least one of author, title, or journal must be provided")
+
     try:
         feed, response = search_arxiv(params.author, params.title, params.journal, params.max_results)
         logger.info(f"arXiv API response status: {response.status_code}")
@@ -120,20 +139,33 @@ async def arxiv_endpoint(params: ArxivSearchParams):
                 db.add(result)
             db.commit()
             logger.info(f"Stored query with id: {query.id}, num_results: {query.num_results}")
+
+            return {"message": "Query results stored successfully", "query_id": query.id,
+                    "num_results": query.num_results}
         finally:
             db.close()
-
-        return {"message": "Query results stored successfully"}
+    except requests.RequestException as e:
+        logger.error(f"Error querying arXiv API: {str(e)}")
+        raise HTTPException(status_code=503, detail="Error connecting to arXiv API")
+    except SQLAlchemyError as e:
+        logger.error(f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Database error occurred")
     except Exception as e:
-        logger.error(f"Error in arxiv_endpoint: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Unexpected error in arxiv_endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail="An unexpected error occurred")
 
 
-@app.get("/queries", response_model=List[QueryResponse])
+@app.get("/queries", response_model=List[QueryResponse], tags=["Queries"])
 async def queries_endpoint(
         query_start_time: datetime = Query(..., description="Start time for query range"),
         query_end_time: Optional[datetime] = Query(None, description="End time for query range")
 ):
+    """
+    Retrieve queries from the database based on timestamp range.
+
+    - **query_start_time**: Start time for the query range (required)
+    - **query_end_time**: End time for the query range (optional)
+    """
     logger.info(f"Received request for queries: start={query_start_time}, end={query_end_time}")
     db = SessionLocal()
     try:
@@ -152,11 +184,17 @@ async def queries_endpoint(
         db.close()
 
 
-@app.get("/results", response_model=List[ResultResponse])
+@app.get("/results", response_model=List[ResultResponse], tags=["Results"])
 async def results_endpoint(
         page: int = Query(0, ge=0, description="Page number"),
         items_per_page: int = Query(10, ge=1, le=100, description="Number of items per page")
 ):
+    """
+    Retrieve stored query results with pagination.
+
+    - **page**: Page number (default: 0)
+    - **items_per_page**: Number of items per page (default: 10, max: 100)
+    """
     logger.info(f"Received request for results: page={page}, items_per_page={items_per_page}")
     db = SessionLocal()
     try:
@@ -175,4 +213,4 @@ async def results_endpoint(
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host=settings.BACKEND_API_HOST, port=settings.BACKEND_API_PORT)

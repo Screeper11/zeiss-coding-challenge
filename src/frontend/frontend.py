@@ -1,14 +1,18 @@
-from fasthtml.common import *
-import httpx
 import logging
 from datetime import datetime, timezone, timedelta
 
-logging.basicConfig(level=logging.INFO)
+import httpx
+from fasthtml.common import *
+
+from config import settings
+
+logging.basicConfig(level=settings.LOG_LEVEL)
 logger = logging.getLogger(__name__)
 
 app, rt = fast_app()
+Favicon("assets/favicon.ico", "assets/favicon.ico")
 
-API_URL = "http://api:8000"
+API_URL = settings.FRONTEND_API_URL
 
 try:
     with open("assets/styles.css", 'r') as file:
@@ -140,4 +144,4 @@ async def get_queries():
 
 
 if __name__ == "__main__":
-    serve()
+    serve(host=settings.FRONTEND_HOST, port=settings.FRONTEND_PORT)

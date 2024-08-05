@@ -2,7 +2,7 @@ services:
   api:
     build:
       context: .
-      dockerfile: Dockerfile.backend
+      dockerfile: src/backend/Dockerfile
     ports:
       - "8000:8000"
     environment:
@@ -13,14 +13,14 @@ services:
   frontend:
     build:
       context: .
-      dockerfile: Dockerfile.frontend
+      dockerfile: src/frontend/Dockerfile
     ports:
       - "5001:5001"
     depends_on:
       - api
 
   db:
-    image: postgres:13
+    image: postgres:16
     environment:
       - POSTGRES_USER=user
       - POSTGRES_PASSWORD=password

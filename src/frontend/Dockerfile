@@ -11,9 +11,10 @@ COPY pyproject.toml poetry.lock* ./
 RUN poetry install --no-dev --no-interaction --no-ansi
 
 # Copy application files
-COPY frontend.py .
-COPY assets ./assets
-COPY assets/favicon.ico .
+COPY src/frontend/frontend.py .
+COPY src/frontend/assets ./assets
+COPY src/frontend/assets/favicon.ico .
+COPY config.py .
 
 # Set permissions
 RUN chown -R appuser:appuser /app
