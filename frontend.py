@@ -10,16 +10,29 @@ app, rt = fast_app()
 
 API_URL = "http://api:8000"
 
+try:
+    with open("assets/styles.css", 'r') as file:
+        styles_css = file.read()
+except (FileNotFoundError, IOError) as e:
+    logger.error(f"Error reading CSS file: {e}")
+    styles_css = ""
+
 
 def query_form():
+    def form_inputs():
+        return [
+            Label("Author", Input(type="text", name="author", placeholder="Enter author name")),
+            Label("Title", Input(type="text", name="title", placeholder="Enter paper title")),
+            Label("Journal", Input(type="text", name="journal", placeholder="Enter journal name")),
+            Label("Max Results", Input(type="number", name="max_results", value="8", min="1", max="50")),
+        ]
+
     return Form(
         H2("arXiv Query Parameters"),
-        Label("Author:", Input(type="text", name="author")),
-        Label("Title:", Input(type="text", name="title")),
-        Label("Journal:", Input(type="text", name="journal")),
-        Label("Max Results:", Input(type="number", name="max_results", value="8")),
+        *form_inputs(),
         Button("Search", type="submit"),
         id="search-form",
+        cls="search-form",
         hx_post="/search",
         hx_target="#results",
         hx_swap="innerHTML",
@@ -33,9 +46,9 @@ def results_list(results):
 
     return Ul(*[
         Li(
-            f"Author: {result['author']}, ",
-            f"Title: {result['title']}, ",
-            f"Journal: {result['journal']}"
+            H3(result['title']),
+            P(f"Author: {result['author']}"),
+            P(f"Journal: {result['journal']}")
         ) for result in results
     ])
 
@@ -44,15 +57,21 @@ def results_list(results):
 async def get():
     return Html(
         Head(
-            Title("arXiv Query Frontend"),
+            Title("ZEISS Coding Challenge | Bence Papp"),
             Link(rel="stylesheet", href="https://unpkg.com/@picocss/pico@latest/css/pico.min.css"),
+            # Link(rel="stylesheet", href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap"),
+            Style(styles_css),
             Script(src="https://unpkg.com/htmx.org@1.9.10")
         ),
         Body(
             Main(
-                H1("arXiv Query Frontend"),
-                query_form(),
-                Div(id="results")
+                Div(
+                    H1("ZEISS Coding Challenge"),
+                    P("Made by Bence Papp", cls="subtitle"),
+                    query_form(),
+                    Div(id="results"),
+                    cls="container"
+                )
             )
         )
     )
@@ -65,17 +84,16 @@ async def post(author: str = "", title: str = "", journal: str = "", max_results
 
     async with httpx.AsyncClient() as client:
         try:
-            # Step 1: Query arXiv
-            response = await client.post(f"{API_URL}/arxiv", json={
+            payload = {
                 "author": author,
                 "title": title,
                 "journal": journal,
                 "max_results": max_results
-            })
+            }
+            response = await client.post(f"{API_URL}/arxiv", json=payload)
             response.raise_for_status()
             logger.info(f"arXiv query response: {response.status_code}")
 
-            # Step 2: Fetch results
             results_response = await client.get(f"{API_URL}/results")
             results_response.raise_for_status()
             results = results_response.json()
@@ -97,7 +115,6 @@ async def get_queries():
 
     async with httpx.AsyncClient() as client:
         try:
-            # Use the current time as the end time and 24 hours ago as the start time
             end_time = datetime.now(timezone.utc)
             start_time = end_time - timedelta(days=1)
 
