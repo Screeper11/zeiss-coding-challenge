@@ -11,10 +11,10 @@ COPY pyproject.toml poetry.lock* ./
 RUN poetry install --no-dev --no-interaction --no-ansi
 
 # Copy application files
-COPY src/frontend/frontend.py .
-COPY src/frontend/assets ./assets
-COPY src/frontend/assets/favicon.ico .
-COPY *.env .
+COPY frontend/src ./src
+COPY frontend/src/assets ./assets
+COPY frontend/src/assets/favicon.ico .
+COPY *.env ./src
 
 # Set permissions
 RUN chown -R appuser:appuser /app
@@ -23,4 +23,4 @@ USER appuser
 # Expose port
 EXPOSE 5001
 
-CMD ["python", "frontend.py"]
+CMD ["python", "/app/src/main.py"]

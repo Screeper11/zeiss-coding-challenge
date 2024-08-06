@@ -11,8 +11,8 @@ COPY pyproject.toml poetry.lock* ./
 RUN poetry install --no-dev --no-interaction --no-ansi
 
 # Copy application files
-COPY src/backend/api.py .
-COPY *.env .
+COPY backend/src ./src
+COPY *.env ./src
 
 # Set permissions
 RUN chown -R appuser:appuser /app
@@ -21,4 +21,4 @@ USER appuser
 # Expose port
 EXPOSE 8000
 
-CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
