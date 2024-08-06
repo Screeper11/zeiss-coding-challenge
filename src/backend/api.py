@@ -6,21 +6,33 @@ from typing import List, Optional
 import feedparser
 import requests
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Depends
 from pydantic import BaseModel
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import sessionmaker, relationship, declarative_base
+from sqlalchemy.orm import sessionmaker, relationship, declarative_base, Session
+from sqlalchemy.pool import QueuePool
+from tenacity import retry, stop_after_attempt, wait_exponential
 
+# Setup logging
 logging.basicConfig(level="INFO")
 logger = logging.getLogger(__name__)
+
+# Load environment variables
 load_dotenv()
 
-engine = create_engine(os.getenv("DATABASE_URL", "postgresql://user:password@db/arxivdb"))
+# Database setup with connection pooling
+engine = create_engine(
+    os.getenv("DATABASE_URL", "postgresql://user:password@db/arxivdb"),
+    poolclass=QueuePool,
+    pool_size=10,
+    max_overflow=20
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 
+# Database models
 class ArxivQuery(Base):
     __tablename__ = "arxiv_queries"
 
@@ -45,8 +57,10 @@ class ArxivResult(Base):
     query = relationship("ArxivQuery", back_populates="results")
 
 
+# Create tables
 Base.metadata.create_all(bind=engine)
 
+# FastAPI app setup
 app = FastAPI(
     title="arXiv API",
     description="An API for searching and storing arXiv papers",
@@ -54,6 +68,7 @@ app = FastAPI(
 )
 
 
+# Pydantic models
 class QueryResponse(BaseModel):
     query: str
     timestamp: datetime
@@ -74,6 +89,17 @@ class ArxivSearchParams(BaseModel):
     max_results: int = 8
 
 
+# Dependency for database sessions
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+# Retry decorator for external API calls
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 def search_arxiv(author: str = "", title: str = "", journal: str = "", max_results: int = 8):
     query_parts = []
     if author:
@@ -101,7 +127,7 @@ def search_arxiv(author: str = "", title: str = "", journal: str = "", max_resul
 
 
 @app.post("/arxiv", response_model=dict, tags=["arXiv"])
-async def arxiv_endpoint(params: ArxivSearchParams):
+async def arxiv_endpoint(params: ArxivSearchParams, db: Session = Depends(get_db)):
     """
     Search arXiv and store results in the database.
 
@@ -119,32 +145,27 @@ async def arxiv_endpoint(params: ArxivSearchParams):
         feed, response = search_arxiv(params.author, params.title, params.journal, params.max_results)
         logger.info(f"arXiv API response status: {response.status_code}")
 
-        db = SessionLocal()
-        try:
-            query = ArxivQuery(
-                query=feed.get("feed", {}).get("title", ""),
-                status=response.status_code,
-                num_results=int(feed.get("feed", {}).get("opensearch_totalresults", 0))
+        query = ArxivQuery(
+            query=feed.get("feed", {}).get("title", ""),
+            status=response.status_code,
+            num_results=int(feed.get("feed", {}).get("opensearch_totalresults", 0))
+        )
+        db.add(query)
+        db.commit()
+        db.refresh(query)
+
+        for entry in feed.entries:
+            result = ArxivResult(
+                query_id=query.id,
+                author=", ".join([author.get("name", "") for author in entry.get("authors", [])]),
+                title=entry.get("title", ""),
+                journal=entry.get("arxiv_journal_ref", "")
             )
-            db.add(query)
-            db.commit()
-            db.refresh(query)
+            db.add(result)
+        db.commit()
+        logger.info(f"Stored query with id: {query.id}, num_results: {query.num_results}")
 
-            for entry in feed.entries:
-                result = ArxivResult(
-                    query_id=query.id,
-                    author=", ".join([author.get("name", "") for author in entry.get("authors", [])]),
-                    title=entry.get("title", ""),
-                    journal=entry.get("arxiv_journal_ref", "")
-                )
-                db.add(result)
-            db.commit()
-            logger.info(f"Stored query with id: {query.id}, num_results: {query.num_results}")
-
-            return {"message": "Query results stored successfully", "query_id": query.id,
-                    "num_results": query.num_results}
-        finally:
-            db.close()
+        return {"message": "Query results stored successfully", "query_id": query.id, "num_results": query.num_results}
     except requests.RequestException as e:
         logger.error(f"Error querying arXiv API: {str(e)}")
         raise HTTPException(status_code=503, detail="Error connecting to arXiv API")
@@ -159,7 +180,8 @@ async def arxiv_endpoint(params: ArxivSearchParams):
 @app.get("/queries", response_model=List[QueryResponse], tags=["Queries"])
 async def queries_endpoint(
         query_start_time: datetime = Query(..., description="Start time for query range"),
-        query_end_time: Optional[datetime] = Query(None, description="End time for query range")
+        query_end_time: Optional[datetime] = Query(None, description="End time for query range"),
+        db: Session = Depends(get_db)
 ):
     """
     Retrieve queries from the database based on timestamp range.
@@ -168,27 +190,25 @@ async def queries_endpoint(
     - **query_end_time**: End time for the query range (optional)
     """
     logger.info(f"Received request for queries: start={query_start_time}, end={query_end_time}")
-    db = SessionLocal()
-    try:
-        query = db.query(ArxivQuery).filter(ArxivQuery.timestamp >= query_start_time)
-        if query_end_time:
-            query = query.filter(ArxivQuery.timestamp <= query_end_time)
-        results = query.all()
-        logger.info(f"Returning {len(results)} queries")
-        return [QueryResponse(
-            query=result.query,
-            timestamp=result.timestamp,
-            status=result.status,
-            num_results=result.num_results
-        ) for result in results]
-    finally:
-        db.close()
+
+    query = db.query(ArxivQuery).filter(ArxivQuery.timestamp >= query_start_time)
+    if query_end_time:
+        query = query.filter(ArxivQuery.timestamp <= query_end_time)
+    results = query.all()
+    logger.info(f"Returning {len(results)} queries")
+    return [QueryResponse(
+        query=result.query,
+        timestamp=result.timestamp,
+        status=result.status,
+        num_results=result.num_results
+    ) for result in results]
 
 
 @app.get("/results", response_model=List[ResultResponse], tags=["Results"])
 async def results_endpoint(
         page: int = Query(0, ge=0, description="Page number"),
-        items_per_page: int = Query(10, ge=1, le=100, description="Number of items per page")
+        items_per_page: int = Query(10, ge=1, le=100, description="Number of items per page"),
+        db: Session = Depends(get_db)
 ):
     """
     Retrieve stored query results with pagination.
@@ -197,18 +217,15 @@ async def results_endpoint(
     - **items_per_page**: Number of items per page (default: 10, max: 100)
     """
     logger.info(f"Received request for results: page={page}, items_per_page={items_per_page}")
-    db = SessionLocal()
-    try:
-        results = db.query(ArxivResult).order_by(ArxivResult.id.desc()).offset(page * items_per_page).limit(
-            items_per_page).all()
-        logger.info(f"Returning {len(results)} results")
-        return [ResultResponse(
-            author=result.author,
-            title=result.title,
-            journal=result.journal
-        ) for result in results]
-    finally:
-        db.close()
+
+    results = db.query(ArxivResult).order_by(ArxivResult.id.desc()).offset(page * items_per_page).limit(
+        items_per_page).all()
+    logger.info(f"Returning {len(results)} results")
+    return [ResultResponse(
+        author=result.author,
+        title=result.title,
+        journal=result.journal
+    ) for result in results]
 
 
 if __name__ == "__main__":
