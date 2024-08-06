@@ -14,7 +14,9 @@ app, rt = fast_app()
 
 Favicon("assets/favicon.ico", "assets/favicon.ico")
 
-API_URL = os.getenv("BACKEND_API_URL", "http://api:8000")
+BACKEND_API_BASE = os.getenv("BACKEND_API_URL_BASE", "http://api")
+BACKEND_API_PORT = os.getenv("BACKEND_API_PORT", "8000")
+API_URL = f"{BACKEND_API_BASE}:{BACKEND_API_PORT}"
 
 
 @rt("/")

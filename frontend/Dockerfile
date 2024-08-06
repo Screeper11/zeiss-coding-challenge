@@ -20,7 +20,4 @@ COPY *.env ./src
 RUN chown -R appuser:appuser /app
 USER appuser
 
-# Expose port
-EXPOSE 5001
-
-CMD ["python", "/app/src/main.py"]
+CMD python /app/src/main.py
