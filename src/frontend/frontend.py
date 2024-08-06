@@ -105,12 +105,14 @@ async def post(author: str = "", title: str = "", journal: str = "", max_results
 
             return results_list(results)
 
-        except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error occurred: {e}")
-            return P(f"Error: {e.response.status_code} - {e.response.text}")
-        except httpx.RequestError as e:
-            logger.error(f"Request error occurred: {e}")
-            return P(f"Error: Unable to connect to the API. Please check if the backend is running.")
+
+        except httpx.HTTPStatusError as error:
+            logger.error(f"HTTP error occurred: {error}")
+            return P(f"Error: {error.response.status_code} - {error.response.text}", cls="error-message")
+        except httpx.RequestError as error:
+            logger.error(f"Request error occurred: {error}")
+            return P(f"Error: Unable to connect to the API. Please check if the backend is running.",
+                     cls="error-message")
 
 
 @rt("/queries")
@@ -135,12 +137,13 @@ async def get_queries():
                 for q in queries
             ])
 
-        except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error occurred: {e}")
-            return P(f"Error: {e.response.status_code} - {e.response.text}")
-        except httpx.RequestError as e:
-            logger.error(f"Request error occurred: {e}")
-            return P(f"Error: Unable to connect to the API. Please check if the backend is running.")
+        except httpx.HTTPStatusError as error:
+            logger.error(f"HTTP error occurred: {error}")
+            return P(f"Error: {error.response.status_code} - {error.response.text}", cls="error-message")
+        except httpx.RequestError as error:
+            logger.error(f"Request error occurred: {error}")
+            return P(f"Error: Unable to connect to the API. Please check if the backend is running.",
+                     cls="error-message")
 
 
 if __name__ == "__main__":

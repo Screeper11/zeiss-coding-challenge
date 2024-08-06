@@ -3,6 +3,7 @@
     --secondary-color: #2c3e50;
     --background-color: #f4f4f4;
     --text-color: #333;
+    --error-color: #e74c3c;
 }
 
 body {
@@ -74,6 +75,11 @@ h1, h2 {
     margin: 0;
 }
 
+#results ul, #results li {
+    list-style: none;
+    padding-left: 0;
+}
+
 #results li {
     background-color: white;
     margin-bottom: 15px;
@@ -91,10 +97,21 @@ h1, h2 {
     margin: 5px 0;
 }
 
+.error-message {
+    background-color: var(--error-color);
+    color: white;
+    padding: 10px;
+    border-radius: 4px;
+    margin-top: 10px;
+    text-align: center;
+    font-weight: bold;
+}
+
 @media (max-width: 600px) {
     .container {
         padding: 10px;
     }
+
     .search-form {
         padding: 15px;
     }
