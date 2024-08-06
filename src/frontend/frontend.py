@@ -1,5 +1,7 @@
 import logging
 from datetime import datetime, timezone, timedelta
+import math
+import os
 
 import httpx
 from dotenv import load_dotenv
@@ -28,7 +30,6 @@ def query_form():
             Label("Author", Input(type="text", name="author", placeholder="Enter author name")),
             Label("Title", Input(type="text", name="title", placeholder="Enter paper title")),
             Label("Journal", Input(type="text", name="journal", placeholder="Enter journal name")),
-            Label("Max Results", Input(type="number", name="max_results", value="8", min="1", max="50")),
         ]
 
     return Form(
@@ -40,15 +41,20 @@ def query_form():
         hx_post="/search",
         hx_target="#results",
         hx_swap="innerHTML",
-        hx_include="[name='author'],[name='title'],[name='journal'],[name='max_results']"
+        hx_include="[name='author'],[name='title'],[name='journal']"
     )
 
 
-def results_list(results):
-    if not results:
+def results_list(results_data, page=1):
+    if not results_data or results_data['total'] == 0:
         return P("No results found.")
 
-    return Ul(*[
+    total_results = results_data['total']
+    items_per_page = results_data['items_per_page']
+    current_page = results_data['page'] + 1  # API uses 0-based indexing, we use 1-based
+    results = results_data['items']
+
+    result_list = Ul(*[
         Li(
             H3(result['title']),
             P(f"Author: {result['author']}"),
@@ -56,14 +62,34 @@ def results_list(results):
         ) for result in results
     ])
 
+    total_pages = min(math.ceil(total_results / items_per_page), 10)  # Maximum 10 pages
+
+    pagination = Div(
+        *(
+            A(
+                str(i),
+                hx_get=f"/search?page={i}",
+                hx_target="#results",
+                cls="page-link active" if i == current_page else "page-link"
+            )
+            for i in range(1, total_pages + 1)
+        ),
+        cls="pagination"
+    )
+
+    return Div(
+        P(f"Showing results {(current_page - 1) * items_per_page + 1}-{min(current_page * items_per_page, total_results)} of {total_results}"),
+        result_list,
+        pagination
+    )
+
 
 @rt("/")
-async def get():
+def get():
     return Html(
         Head(
             Title("ZEISS Coding Challenge | Bence Papp"),
             Link(rel="stylesheet", href="https://unpkg.com/@picocss/pico@latest/css/pico.min.css"),
-            # Link(rel="stylesheet", href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap"),
             Style(styles_css),
             Script(src="https://unpkg.com/htmx.org@1.9.10")
         ),
@@ -81,10 +107,10 @@ async def get():
     )
 
 
-@rt("/search", methods=["POST"])
-async def post(author: str = "", title: str = "", journal: str = "", max_results: int = 8):
+@rt("/search")
+async def post(author: str = "", title: str = "", journal: str = ""):
     logger.info(
-        f"Received search request: author={author}, title={title}, journal={journal}, max_results={max_results}")
+        f"Received search request: author={author}, title={title}, journal={journal}")
 
     async with httpx.AsyncClient() as client:
         try:
@@ -92,56 +118,42 @@ async def post(author: str = "", title: str = "", journal: str = "", max_results
                 "author": author,
                 "title": title,
                 "journal": journal,
-                "max_results": max_results
+                "max_results": 100  # Request maximum results to populate cache
             }
             response = await client.post(f"{API_URL}/arxiv", json=payload)
             response.raise_for_status()
             logger.info(f"arXiv query response: {response.status_code}")
 
-            results_response = await client.get(f"{API_URL}/results")
+            results_response = await client.get(f"{API_URL}/results?page=0&items_per_page=10")
             results_response.raise_for_status()
             results = results_response.json()
-            logger.info(f"Fetched {len(results)} results")
+            logger.info(f"Fetched {len(results['items'])} results out of {results['total']}")
 
             return results_list(results)
 
-
-        except httpx.HTTPStatusError as error:
-            logger.error(f"HTTP error occurred: {error}")
-            return P(f"Error: {error.response.status_code} - {error.response.text}", cls="error-message")
-        except httpx.RequestError as error:
-            logger.error(f"Request error occurred: {error}")
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error occurred: {e}")
+            return P(f"Error: {e.response.status_code} - {e.response.text}", cls="error-message")
+        except httpx.RequestError as e:
+            logger.error(f"Request error occurred: {e}")
             return P(f"Error: Unable to connect to the API. Please check if the backend is running.",
                      cls="error-message")
 
 
-@rt("/queries")
-async def get_queries():
-    logger.info("Received request to fetch queries")
-
+@rt("/search")
+async def get(page: int = 1):
     async with httpx.AsyncClient() as client:
         try:
-            end_time = datetime.now(timezone.utc)
-            start_time = end_time - timedelta(days=1)
-
-            response = await client.get(f"{API_URL}/queries", params={
-                "query_start_time": start_time.isoformat(),
-                "query_end_time": end_time.isoformat()
-            })
-            response.raise_for_status()
-            queries = response.json()
-            logger.info(f"Fetched {len(queries)} queries")
-
-            return Ul(*[
-                Li(f"Query: {q['query']}, Timestamp: {q['timestamp']}, Status: {q['status']}, Results: {q['num_results']}")
-                for q in queries
-            ])
-
-        except httpx.HTTPStatusError as error:
-            logger.error(f"HTTP error occurred: {error}")
-            return P(f"Error: {error.response.status_code} - {error.response.text}", cls="error-message")
-        except httpx.RequestError as error:
-            logger.error(f"Request error occurred: {error}")
+            results_response = await client.get(f"{API_URL}/results?page={page - 1}&items_per_page=10")
+            results_response.raise_for_status()
+            results = results_response.json()
+            logger.info(f"Fetched {len(results['items'])} results for page {page}")
+            return results_list(results, page)
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error occurred: {e}")
+            return P(f"Error: {e.response.status_code} - {e.response.text}", cls="error-message")
+        except httpx.RequestError as e:
+            logger.error(f"Request error occurred: {e}")
             return P(f"Error: Unable to connect to the API. Please check if the backend is running.",
                      cls="error-message")
 

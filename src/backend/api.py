@@ -8,7 +8,7 @@ import requests
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Depends
 from pydantic import BaseModel
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey, func
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker, relationship, declarative_base, Session
 from sqlalchemy.pool import QueuePool
@@ -82,11 +82,18 @@ class ResultResponse(BaseModel):
     journal: str
 
 
+class PaginatedResponse(BaseModel):
+    total: int
+    page: int
+    items_per_page: int
+    items: List[QueryResponse] | List[ResultResponse]
+
+
 class ArxivSearchParams(BaseModel):
     author: str = ""
     title: str = ""
     journal: str = ""
-    max_results: int = 8
+    max_results: int = 100
 
 
 # Dependency for database sessions
@@ -100,7 +107,7 @@ def get_db():
 
 # Retry decorator for external API calls
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
-def search_arxiv(author: str = "", title: str = "", journal: str = "", max_results: int = 8):
+def search_arxiv(author: str = "", title: str = "", journal: str = "", max_results: int = 100):
     query_parts = []
     if author:
         query_parts.append(f"au:{author}")
@@ -134,7 +141,7 @@ async def arxiv_endpoint(params: ArxivSearchParams, db: Session = Depends(get_db
     - **author**: Author name to search for
     - **title**: Title to search for
     - **journal**: Journal to search for
-    - **max_results**: Maximum number of results to return (default: 8)
+    - **max_results**: Maximum number of results to return (default: 100)
     """
     logger.info(f"Received arXiv request: {params}")
 
@@ -148,13 +155,13 @@ async def arxiv_endpoint(params: ArxivSearchParams, db: Session = Depends(get_db
         query = ArxivQuery(
             query=feed.get("feed", {}).get("title", ""),
             status=response.status_code,
-            num_results=int(feed.get("feed", {}).get("opensearch_totalresults", 0))
+            num_results=min(int(feed.get("feed", {}).get("opensearch_totalresults", 0)), 100)
         )
         db.add(query)
         db.commit()
         db.refresh(query)
 
-        for entry in feed.entries:
+        for entry in feed.entries[:100]:  # Limit to 100 results (10 pages * 10 per page)
             result = ArxivResult(
                 query_id=query.id,
                 author=", ".join([author.get("name", "") for author in entry.get("authors", [])]),
@@ -177,55 +184,74 @@ async def arxiv_endpoint(params: ArxivSearchParams, db: Session = Depends(get_db
         raise HTTPException(status_code=500, detail="An unexpected error occurred")
 
 
-@app.get("/queries", response_model=List[QueryResponse], tags=["Queries"])
+@app.get("/queries", response_model=PaginatedResponse, tags=["Queries"])
 async def queries_endpoint(
         query_start_time: datetime = Query(..., description="Start time for query range"),
         query_end_time: Optional[datetime] = Query(None, description="End time for query range"),
+        page: int = Query(0, ge=0, lt=10, description="Page number (0-9)"),
+        items_per_page: int = Query(10, const=True, description="Number of items per page (fixed at 10)"),
         db: Session = Depends(get_db)
 ):
     """
-    Retrieve queries from the database based on timestamp range.
+    Retrieve queries from the database based on timestamp range with pagination.
 
     - **query_start_time**: Start time for the query range (required)
     - **query_end_time**: End time for the query range (optional)
+    - **page**: Page number (0-9, default: 0)
+    - **items_per_page**: Number of items per page (fixed at 10)
     """
-    logger.info(f"Received request for queries: start={query_start_time}, end={query_end_time}")
+    logger.info(f"Received request for queries: start={query_start_time}, end={query_end_time}, page={page}")
 
     query = db.query(ArxivQuery).filter(ArxivQuery.timestamp >= query_start_time)
     if query_end_time:
         query = query.filter(ArxivQuery.timestamp <= query_end_time)
-    results = query.all()
-    logger.info(f"Returning {len(results)} queries")
-    return [QueryResponse(
-        query=result.query,
-        timestamp=result.timestamp,
-        status=result.status,
-        num_results=result.num_results
-    ) for result in results]
+
+    total = query.count()
+    results = query.order_by(ArxivQuery.timestamp.desc()).offset(page * items_per_page).limit(items_per_page).all()
+
+    logger.info(f"Returning {len(results)} queries out of {total}")
+    return PaginatedResponse(
+        total=min(total, 100),  # Limit total to 100
+        page=page,
+        items_per_page=items_per_page,
+        items=[QueryResponse(
+            query=result.query,
+            timestamp=result.timestamp,
+            status=result.status,
+            num_results=result.num_results
+        ) for result in results]
+    )
 
 
-@app.get("/results", response_model=List[ResultResponse], tags=["Results"])
+@app.get("/results", response_model=PaginatedResponse, tags=["Results"])
 async def results_endpoint(
-        page: int = Query(0, ge=0, description="Page number"),
-        items_per_page: int = Query(10, ge=1, le=100, description="Number of items per page"),
+        page: int = Query(0, ge=0, lt=10, description="Page number (0-9)"),
+        items_per_page: int = Query(10, const=True, description="Number of items per page (fixed at 10)"),
         db: Session = Depends(get_db)
 ):
     """
     Retrieve stored query results with pagination.
 
-    - **page**: Page number (default: 0)
-    - **items_per_page**: Number of items per page (default: 10, max: 100)
+    - **page**: Page number (0-9, default: 0)
+    - **items_per_page**: Number of items per page (fixed at 10)
     """
-    logger.info(f"Received request for results: page={page}, items_per_page={items_per_page}")
+    logger.info(f"Received request for results: page={page}")
 
+    total = db.query(func.count(ArxivResult.id)).scalar()
     results = db.query(ArxivResult).order_by(ArxivResult.id.desc()).offset(page * items_per_page).limit(
         items_per_page).all()
-    logger.info(f"Returning {len(results)} results")
-    return [ResultResponse(
-        author=result.author,
-        title=result.title,
-        journal=result.journal
-    ) for result in results]
+
+    logger.info(f"Returning {len(results)} results out of {total}")
+    return PaginatedResponse(
+        total=min(total, 100),  # Limit total to 100
+        page=page,
+        items_per_page=items_per_page,
+        items=[ResultResponse(
+            author=result.author,
+            title=result.title,
+            journal=result.journal
+        ) for result in results]
+    )
 
 
 if __name__ == "__main__":
