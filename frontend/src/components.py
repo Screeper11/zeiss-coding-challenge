@@ -12,14 +12,26 @@ def query_form():
     return Form(
         H2("arXiv Query Parameters"),
         *form_inputs(),
-        Button("Search", type="submit"),
+        Button("Search", type="submit", id="search-button", disabled="true"),
         id="search-form",
         cls="search-form",
         hx_post="/search",
         hx_target="#results",
         hx_swap="innerHTML",
-        hx_include="[name='author'],[name='title'],[name='journal']"
+        hx_include="[name='author'],[name='title'],[name='journal']",
+        hx_on="input: checkInputs()"
     )
+
+
+def checkInputs():
+    return Script("""
+    function checkInputs() {
+        var inputs = document.querySelectorAll('#search-form input[type="text"]');
+        var button = document.querySelector('#search-button');
+        var isEmpty = Array.from(inputs).every(input => input.value.trim() === '');
+        button.disabled = isEmpty;
+    }
+    """)
 
 
 def results_list(results_data, page=1):

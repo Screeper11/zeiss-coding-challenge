@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from fasthtml.common import *
 from httpx import AsyncClient, HTTPStatusError, RequestError
 
-from components import query_form, results_list
+from components import query_form, results_list, checkInputs
 
 logging.basicConfig(level="INFO")
 logger = logging.getLogger(__name__)
@@ -26,7 +26,8 @@ def get():
             Title("ZEISS Coding Challenge | Bence Papp"),
             Link(rel="stylesheet", href="https://unpkg.com/@picocss/pico@latest/css/pico.min.css"),
             Style(styles_css),
-            Script(src="https://unpkg.com/htmx.org@1.9.10")
+            Script(src="https://unpkg.com/htmx.org@1.9.10"),
+            checkInputs()  # Add this line to include the checkInputs script
         ),
         Body(
             Main(
