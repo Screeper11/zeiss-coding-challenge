@@ -21,6 +21,7 @@ python-fasthtml = "0.2.4"
 
 [tool.poetry.dev-dependencies]
 pytest = "^8.3.2"
+pytest-postgresql = "^6.0.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
