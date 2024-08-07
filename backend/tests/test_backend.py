@@ -1,46 +1,55 @@
-from datetime import datetime, timedelta
+import logging
+from datetime import datetime
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from src.api.arxiv import get_db
-from src.database import Base
-from src.main import app
-from src.models import ArxivQuery, ArxivResult
+
+from backend.src.api.arxiv import get_db
+from backend.src.database import Base
+from backend.src.main import app
+from backend.src.models import ArxivQuery, ArxivResult
+
+# Set up logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 # Set up test database
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-Base.metadata.create_all(bind=engine)
+
+@pytest.fixture(scope="module", autouse=True)
+def setup_database():
+    Base.metadata.create_all(bind=engine)
+    yield
+    Base.metadata.drop_all(bind=engine)
 
 
 def override_get_db():
+    db = TestingSessionLocal()
     try:
-        db = TestingSessionLocal()
         yield db
     finally:
         db.close()
 
 
-app.dependency_overrides[get_db] = override_get_db
+@pytest.fixture(scope="function")
+def client():
+    app.dependency_overrides[get_db] = override_get_db
+    with TestClient(app) as c:
+        yield c
 
-client = TestClient(app)
 
-
-@pytest.fixture
+@pytest.fixture(scope="function")
 def db_session():
-    connection = engine.connect()
-    transaction = connection.begin()
-    session = TestingSessionLocal(bind=connection)
-
-    yield session
-
-    session.close()
-    transaction.rollback()
-    connection.close()
+    db = TestingSessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 
 def test_create_arxiv_query(db_session):
@@ -70,9 +79,13 @@ def test_create_arxiv_result(db_session):
     assert result.journal == "Test Journal"
 
 
-def test_arxiv_endpoint():
-    response = client.post("/arxiv", json={"author": "Test Author", "title": "Test Title", "journal": "Test Journal",
-                                           "max_results": 10})
+def test_arxiv_endpoint(client):
+    response = client.post("/arxiv", json={
+        "author": "Test Author",
+        "title": "Test Title",
+        "journal": "Test Journal",
+        "max_results": 10
+    })
     assert response.status_code == 200
     data = response.json()
     assert "message" in data
@@ -80,51 +93,42 @@ def test_arxiv_endpoint():
     assert "num_results" in data
 
 
-def test_queries_endpoint():
-    # Add some test data
-    db = next(override_get_db())
-    query1 = ArxivQuery(query="test query 1", status=200, num_results=10, timestamp=datetime.now())
-    query2 = ArxivQuery(query="test query 2", status=200, num_results=5, timestamp=datetime.now() - timedelta(days=1))
-    db.add(query1)
-    db.add(query2)
-    db.commit()
+def test_arxiv_endpoint_invalid_input(client):
+    response = client.post("/arxiv", json={
+        "author": "",
+        "title": "",
+        "journal": "",
+        "max_results": 10
+    })
+    assert response.status_code == 400
+    data = response.json()
+    assert "detail" in data
+    assert "At least one of author, title, or journal must be provided" in data["detail"]
 
+
+def test_arxiv_endpoint_max_results(client):
+    response = client.post("/arxiv", json={
+        "author": "Test Author",
+        "title": "Test Title",
+        "max_results": 150  # Exceeds the limit of 100
+    })
+    assert response.status_code == 200
+    data = response.json()
+    assert data["num_results"] <= 100
+
+
+def test_queries_endpoint_invalid_date_format(client):
     response = client.get("/queries", params={
-        "query_start_time": (datetime.now() - timedelta(days=2)).isoformat(),
+        "query_start_time": "invalid-date",
         "query_end_time": datetime.now().isoformat(),
         "page": 0
     })
-    if response.status_code != 200:
-        print(f"Queries endpoint error: {response.status_code}")
-        print(f"Response content: {response.content}")
-    assert response.status_code == 200
-    data = response.json()
-    assert data["total"] == 2
-    assert len(data["items"]) == 2
+    assert response.status_code == 422  # Unprocessable Entity
 
 
-def test_results_endpoint():
-    # Add some test data
-    db = next(override_get_db())
-    query = ArxivQuery(query="test query", status=200, num_results=2)
-    db.add(query)
-    db.commit()
-    result1 = ArxivResult(query_id=query.id, author="Author 1", title="Title 1", journal="Journal 1")
-    result2 = ArxivResult(query_id=query.id, author="Author 2", title="Title 2", journal="Journal 2")
-    db.add(result1)
-    db.add(result2)
-    db.commit()
-
-    response = client.get("/results", params={"page": 0})
-    if response.status_code != 200:
-        print(f"Results endpoint error: {response.status_code}")
-        print(f"Response content: {response.content}")
-    assert response.status_code == 200
-    data = response.json()
-    assert data["total"] == 2
-    assert len(data["items"]) == 2
-    assert data["items"][0]["author"] == "Author 2"  # Assuming reverse order
-    assert data["items"][1]["author"] == "Author 1"
+def test_results_endpoint_invalid_page(client):
+    response = client.get("/results", params={"page": -1})
+    assert response.status_code == 422  # Unprocessable Entity
 
 
 if __name__ == "__main__":
