@@ -1,2 +1,5 @@
-.idea
-__pycache__
+.idea/
+.pytest_cache/
+**/__pycache__/
+
+/backend/tests/test.db
