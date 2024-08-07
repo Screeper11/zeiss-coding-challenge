@@ -1,8 +1,8 @@
 import logging
 
-import httpx
 from dotenv import load_dotenv
 from fasthtml.common import *
+from httpx import AsyncClient, HTTPStatusError, RequestError
 
 from components import query_form, results_list
 
@@ -46,7 +46,7 @@ def get():
 async def post(author: str = "", title: str = "", journal: str = ""):
     logger.info(f"Received search request: author={author}, title={title}, journal={journal}")
 
-    async with httpx.AsyncClient() as client:
+    async with AsyncClient() as client:
         try:
             payload = {
                 "author": author,
@@ -65,10 +65,10 @@ async def post(author: str = "", title: str = "", journal: str = ""):
 
             return results_list(results)
 
-        except httpx.HTTPStatusError as e:
+        except HTTPStatusError as e:
             logger.error(f"HTTP error occurred: {e}")
             return P(f"Error: {e.response.status_code} - {e.response.text}", cls="error-message")
-        except httpx.RequestError as e:
+        except RequestError as e:
             logger.error(f"Request error occurred: {e}")
             return P(f"Error: Unable to connect to the API. Please check if the backend is running.",
                      cls="error-message")
@@ -76,17 +76,17 @@ async def post(author: str = "", title: str = "", journal: str = ""):
 
 @rt("/search")
 async def get(page: int = 1):
-    async with httpx.AsyncClient() as client:
+    async with AsyncClient() as client:
         try:
             results_response = await client.get(f"{API_URL}/results?page={page - 1}&items_per_page=10")
             results_response.raise_for_status()
             results = results_response.json()
             logger.info(f"Fetched {len(results['items'])} results for page {page}")
             return results_list(results, page)
-        except httpx.HTTPStatusError as e:
+        except HTTPStatusError as e:
             logger.error(f"HTTP error occurred: {e}")
             return P(f"Error: {e.response.status_code} - {e.response.text}", cls="error-message")
-        except httpx.RequestError as e:
+        except RequestError as e:
             logger.error(f"Request error occurred: {e}")
             return P(f"Error: Unable to connect to the API. Please check if the backend is running.",
                      cls="error-message")
