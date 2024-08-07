@@ -96,8 +96,8 @@ async def get(page: int = 1):
 try:
     with open("assets/styles.css", 'r') as file:
         styles_css = file.read()
-except (FileNotFoundError, IOError) as e:
-    logger.error(f"Error reading CSS file: {e}")
+except (FileNotFoundError, IOError) as error:
+    logger.error(f"Error reading CSS file: {error}")
     styles_css = ""
 
 if __name__ == "__main__":

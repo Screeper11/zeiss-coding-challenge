@@ -5,11 +5,12 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from ..database import SessionLocal
-from ..models import ArxivResult
+from ..models import ArxivResult, ArxivQuery
 from ..schemas import PaginatedResponse, ResultResponse
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
 
 def get_db():
     db = SessionLocal()
@@ -17,6 +18,7 @@ def get_db():
         yield db
     finally:
         db.close()
+
 
 @router.get("/results", response_model=PaginatedResponse, tags=["Results"])
 async def results_endpoint(
@@ -27,8 +29,15 @@ async def results_endpoint(
     logger.info(f"Received request for results: page={page}")
 
     try:
-        total = db.query(ArxivResult).count()
-        results = db.query(ArxivResult).order_by(ArxivResult.id.desc()).offset(page * items_per_page).limit(items_per_page).all()
+        # Get the most recent query
+        latest_query = db.query(ArxivQuery).order_by(ArxivQuery.id.desc()).first()
+
+        if latest_query is None:
+            return PaginatedResponse(total=0, page=page, items_per_page=items_per_page, items=[])
+
+        total = latest_query.num_results
+        results = db.query(ArxivResult).filter(ArxivResult.query_id == latest_query.id).order_by(
+            ArxivResult.id.desc()).offset(page * items_per_page).limit(items_per_page).all()
 
         logger.info(f"Returning {len(results)} results out of {total}")
         return PaginatedResponse(
@@ -41,9 +50,9 @@ async def results_endpoint(
                 journal=result.journal
             ) for result in results]
         )
-    except SQLAlchemyError as e:
-        logger.error(f"Database error: {str(e)}")
+    except SQLAlchemyError as error:
+        logger.error(f"Database error: {str(error)}")
         raise HTTPException(status_code=500, detail="Database error occurred")
-    except Exception as e:
-        logger.error(f"Unexpected error in results_endpoint: {str(e)}")
+    except Exception as error:
+        logger.error(f"Unexpected error in results_endpoint: {str(error)}")
         raise HTTPException(status_code=500, detail="An unexpected error occurred")

@@ -70,12 +70,12 @@ async def arxiv_endpoint(params: ArxivSearchParams, db: Session = Depends(get_db
         logger.info(f"Stored query with id: {query.id}, num_results: {query.num_results}")
 
         return {"message": "Query results stored successfully", "query_id": query.id, "num_results": query.num_results}
-    except requests.RequestException as e:
-        logger.error(f"Error querying arXiv API: {str(e)}")
+    except requests.RequestException as error:
+        logger.error(f"Error querying arXiv API: {str(error)}")
         raise HTTPException(status_code=503, detail="Error connecting to arXiv API")
-    except SQLAlchemyError as e:
-        logger.error(f"Database error: {str(e)}")
+    except SQLAlchemyError as error:
+        logger.error(f"Database error: {str(error)}")
         raise HTTPException(status_code=500, detail="Database error occurred")
-    except Exception as e:
-        logger.error(f"Unexpected error in arxiv_endpoint: {str(e)}")
+    except Exception as error:
+        logger.error(f"Unexpected error in arxiv_endpoint: {str(error)}")
         raise HTTPException(status_code=500, detail="An unexpected error occurred")

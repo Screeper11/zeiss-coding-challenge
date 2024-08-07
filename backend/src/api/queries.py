@@ -50,9 +50,9 @@ async def queries_endpoint(
                 num_results=result.num_results
             ) for result in results]
         )
-    except SQLAlchemyError as e:
-        logger.error(f"Database error: {str(e)}")
+    except SQLAlchemyError as error:
+        logger.error(f"Database error: {str(error)}")
         raise HTTPException(status_code=500, detail="Database error occurred")
-    except Exception as e:
-        logger.error(f"Unexpected error in queries_endpoint: {str(e)}")
+    except Exception as error:
+        logger.error(f"Unexpected error in queries_endpoint: {str(error)}")
         raise HTTPException(status_code=500, detail="An unexpected error occurred")

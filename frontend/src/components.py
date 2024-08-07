@@ -36,7 +36,7 @@ def check_inputs():
 
 def results_list(results_data):
     if not results_data or results_data['total'] == 0:
-        return P("No results found.")
+        return P("No results", cls="error-message")
 
     total_results = results_data['total']
     items_per_page = results_data['items_per_page']
