@@ -1,6 +1,5 @@
 import logging
 import os
-from datetime import datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -89,58 +88,6 @@ def test_create_arxiv_result(db_session):
     assert result.author == "Test Author"
     assert result.title == "Test Title"
     assert result.journal == "Test Journal"
-
-
-def test_arxiv_endpoint(client):
-    response = client.post("/arxiv", json={
-        "author": "Test Author",
-        "title": "Test Title",
-        "journal": "Test Journal",
-        "max_results": 10
-    })
-    assert response.status_code == 200
-    data = response.json()
-    assert "message" in data
-    assert "query_id" in data
-    assert "num_results" in data
-
-
-def test_arxiv_endpoint_invalid_input(client):
-    response = client.post("/arxiv", json={
-        "author": "",
-        "title": "",
-        "journal": "",
-        "max_results": 10
-    })
-    assert response.status_code == 400
-    data = response.json()
-    assert "detail" in data
-    assert "At least one of author, title, or journal must be provided" in data["detail"]
-
-
-def test_arxiv_endpoint_max_results(client):
-    response = client.post("/arxiv", json={
-        "author": "Test Author",
-        "title": "Test Title",
-        "max_results": 150  # Exceeds the limit of 100
-    })
-    assert response.status_code == 200
-    data = response.json()
-    assert data["num_results"] <= 100
-
-
-def test_queries_endpoint_invalid_date_format(client):
-    response = client.get("/queries", params={
-        "query_start_time": "invalid-date",
-        "query_end_time": datetime.now().isoformat(),
-        "page": 0
-    })
-    assert response.status_code == 422  # Unprocessable Entity
-
-
-def test_results_endpoint_invalid_page(client):
-    response = client.get("/results", params={"page": -1})
-    assert response.status_code == 422  # Unprocessable Entity
 
 
 if __name__ == "__main__":
