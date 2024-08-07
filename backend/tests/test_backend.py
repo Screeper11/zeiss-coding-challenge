@@ -57,7 +57,8 @@ def db_session():
 
 
 @pytest.fixture(scope="function")
-def client():
+def client(db_session):
+    # noinspection PyUnresolvedReferences
     app.dependency_overrides[get_db] = db_session
     with TestClient(app) as c:
         yield c

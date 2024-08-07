@@ -1,4 +1,5 @@
 import logging
+from typing import cast
 
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.exc import SQLAlchemyError
@@ -35,7 +36,7 @@ async def results_endpoint(
         if latest_query is None:
             return PaginatedResponse(total=0, page=page, items_per_page=items_per_page, items=[])
 
-        total = latest_query.num_results
+        total = cast(int, latest_query.num_results)
         results = db.query(ArxivResult).filter(ArxivResult.query_id == latest_query.id).order_by(
             ArxivResult.id.desc()).offset(page * items_per_page).limit(items_per_page).all()
 

@@ -25,6 +25,8 @@ def get():
         Head(
             Title("ZEISS Coding Challenge | Bence Papp"),
             Link(rel="stylesheet", href="https://unpkg.com/@picocss/pico@latest/css/pico.min.css"),
+            Link(rel="stylesheet",
+                 href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap"),
             Style(styles_css),
             Script(src="https://unpkg.com/htmx.org@1.9.10"),
             check_inputs()
@@ -96,8 +98,8 @@ async def get(page: int = 1):
 try:
     with open("assets/styles.css", 'r') as file:
         styles_css = file.read()
-except (FileNotFoundError, IOError) as error:
-    logger.error(f"Error reading CSS file: {error}")
+except (FileNotFoundError, IOError) as io_error:
+    logger.error(f"Error reading CSS file: {io_error}")
     styles_css = ""
 
 if __name__ == "__main__":
