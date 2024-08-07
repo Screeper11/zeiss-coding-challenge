@@ -1,4 +1,5 @@
 import logging
+import os
 from datetime import datetime
 
 import pytest
@@ -21,26 +22,30 @@ engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
+def remove_db_file():
+    if os.path.exists("./test.db"):
+        try:
+            os.remove("./test.db")
+            logger.info("Removed test.db file")
+        except PermissionError:
+            logger.warning("Unable to remove test.db file. It may still be in use.")
+
+
+@pytest.fixture(scope="session", autouse=True)
+def clean_up(request):
+    def finalizer():
+        TestingSessionLocal.close_all()
+        engine.dispose()
+        remove_db_file()
+
+    request.addfinalizer(finalizer)
+
+
 @pytest.fixture(scope="module", autouse=True)
 def setup_database():
     Base.metadata.create_all(bind=engine)
     yield
     Base.metadata.drop_all(bind=engine)
-
-
-def override_get_db():
-    db = TestingSessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-@pytest.fixture(scope="function")
-def client():
-    app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as c:
-        yield c
 
 
 @pytest.fixture(scope="function")
@@ -50,6 +55,13 @@ def db_session():
         yield db
     finally:
         db.close()
+
+
+@pytest.fixture(scope="function")
+def client():
+    app.dependency_overrides[get_db] = db_session
+    with TestClient(app) as c:
+        yield c
 
 
 def test_create_arxiv_query(db_session):

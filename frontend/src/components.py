@@ -23,7 +23,7 @@ def query_form():
     )
 
 
-def checkInputs():
+def check_inputs():
     return Script("""
     function checkInputs() {
         var inputs = document.querySelectorAll('#search-form input[type="text"]');
@@ -34,7 +34,7 @@ def checkInputs():
     """)
 
 
-def results_list(results_data, page=1):
+def results_list(results_data):
     if not results_data or results_data['total'] == 0:
         return P("No results found.")
 

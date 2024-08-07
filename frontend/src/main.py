@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from fasthtml.common import *
 from httpx import AsyncClient, HTTPStatusError, RequestError
 
-from components import query_form, results_list, checkInputs
+from components import query_form, results_list, check_inputs
 
 logging.basicConfig(level="INFO")
 logger = logging.getLogger(__name__)
@@ -27,7 +27,7 @@ def get():
             Link(rel="stylesheet", href="https://unpkg.com/@picocss/pico@latest/css/pico.min.css"),
             Style(styles_css),
             Script(src="https://unpkg.com/htmx.org@1.9.10"),
-            checkInputs()  # Add this line to include the checkInputs script
+            check_inputs()
         ),
         Body(
             Main(
@@ -66,11 +66,11 @@ async def post(author: str = "", title: str = "", journal: str = ""):
 
             return results_list(results)
 
-        except HTTPStatusError as e:
-            logger.error(f"HTTP error occurred: {e}")
-            return P(f"Error: {e.response.status_code} - {e.response.text}", cls="error-message")
-        except RequestError as e:
-            logger.error(f"Request error occurred: {e}")
+        except HTTPStatusError as error:
+            logger.error(f"HTTP error occurred: {error}")
+            return P(f"Error: {error.response.status_code} - {error.response.text}", cls="error-message")
+        except RequestError as error:
+            logger.error(f"Request error occurred: {error}")
             return P(f"Error: Unable to connect to the API. Please check if the backend is running.",
                      cls="error-message")
 
@@ -83,12 +83,12 @@ async def get(page: int = 1):
             results_response.raise_for_status()
             results = results_response.json()
             logger.info(f"Fetched {len(results['items'])} results for page {page}")
-            return results_list(results, page)
-        except HTTPStatusError as e:
-            logger.error(f"HTTP error occurred: {e}")
-            return P(f"Error: {e.response.status_code} - {e.response.text}", cls="error-message")
-        except RequestError as e:
-            logger.error(f"Request error occurred: {e}")
+            return results_list(results)
+        except HTTPStatusError as error:
+            logger.error(f"HTTP error occurred: {error}")
+            return P(f"Error: {error.response.status_code} - {error.response.text}", cls="error-message")
+        except RequestError as error:
+            logger.error(f"Request error occurred: {error}")
             return P(f"Error: Unable to connect to the API. Please check if the backend is running.",
                      cls="error-message")
 

@@ -39,13 +39,14 @@ def test_pagination(page: Page):
     assert count > 0
 
 
-def test_error_handling(page: Page):
-    # Simulate a backend error by providing an invalid input
+def test_search_button_disabled_on_empty_input(page: Page):
+    # Clear all input fields
     page.fill('input[name="author"]', "")
     page.fill('input[name="title"]', "")
     page.fill('input[name="journal"]', "")
-    page.click('button[type="submit"]')
-    expect(page.locator(".error-message")).to_be_visible()
+
+    # Check if the search button is disabled
+    expect(page.locator('button[type="submit"]')).to_be_disabled()
 
 
 def test_result_display(page: Page):
@@ -55,9 +56,7 @@ def test_result_display(page: Page):
     # Check if the results container is visible
     expect(page.locator("#results")).to_be_visible()
 
-    # Log the count of results for debugging
     count = page.locator("#results li").count()
-    print(f"Number of results: {count}")  # Print count for debugging
 
     assert count > 0
 

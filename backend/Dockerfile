@@ -18,4 +18,6 @@ COPY *.env ./src
 RUN chown -R appuser:appuser /app
 USER appuser
 
+ENV BACKEND_API_PORT=8000
+
 CMD uvicorn src.main:app --host 0.0.0.0 --port $BACKEND_API_PORT

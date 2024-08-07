@@ -1,4 +1,3 @@
-from .main import app, rt, API_URL, logger, styles_css
-from .components import *
+from .main import app, rt
 
 __all__ = ['app', 'rt']
