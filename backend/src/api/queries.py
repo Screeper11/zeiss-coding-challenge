@@ -5,6 +5,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from .utils import get_db
 from ..models import ArxivQuery
@@ -12,6 +13,14 @@ from ..schemas import PaginatedResponse, QueryResponse
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+def fetch_queries(db: Session, query_start_time: datetime, query_end_time: Optional[datetime], skip: int, limit: int):
+    query = db.query(ArxivQuery).filter(ArxivQuery.timestamp >= query_start_time)
+    if query_end_time:
+        query = query.filter(ArxivQuery.timestamp <= query_end_time)
+    return query.order_by(ArxivQuery.timestamp.desc()).offset(skip).limit(limit).all()
 
 
 @router.get("/queries", response_model=PaginatedResponse, tags=["Queries"])
@@ -30,7 +39,7 @@ async def queries_endpoint(
             query = query.filter(ArxivQuery.timestamp <= query_end_time)
 
         total = query.count()
-        results = query.order_by(ArxivQuery.timestamp.desc()).offset(page * items_per_page).limit(items_per_page).all()
+        results = fetch_queries(db, query_start_time, query_end_time, page * items_per_page, items_per_page)
 
         logger.info(f"Returning {len(results)} queries out of {total}")
         return PaginatedResponse(

@@ -1,9 +1,10 @@
 import logging
-from typing import cast
 
 from fastapi import APIRouter, Depends, Query, HTTPException
+from sqlalchemy import and_
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from .utils import get_db
 from ..models import ArxivResult, ArxivQuery
@@ -11,6 +12,17 @@ from ..schemas import PaginatedResponse, ResultResponse
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+def fetch_latest_query(db: Session):
+    return db.query(ArxivQuery).order_by(ArxivQuery.id.desc()).first()
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+def fetch_results(db: Session, query_id: int, skip: int, limit: int):
+    return db.query(ArxivResult).filter(and_(ArxivResult.query_id == query_id)).order_by(
+        ArxivResult.id.desc()).offset(skip).limit(limit).all()
 
 
 @router.get("/results", response_model=PaginatedResponse, tags=["Results"])
@@ -22,15 +34,13 @@ async def results_endpoint(
     logger.info(f"Received request for results: page={page}")
 
     try:
-        # Get the most recent query
-        latest_query = db.query(ArxivQuery).order_by(ArxivQuery.id.desc()).first()
+        latest_query: ArxivQuery | None = fetch_latest_query(db)
 
         if latest_query is None:
             return PaginatedResponse(total=0, page=page, items_per_page=items_per_page, items=[])
 
-        total = cast(int, latest_query.num_results)
-        results = db.query(ArxivResult).filter(ArxivResult.query_id == latest_query.id).order_by(
-            ArxivResult.id.desc()).offset(page * items_per_page).limit(items_per_page).all()
+        total = latest_query.num_results
+        results = fetch_results(db, latest_query.id, page * items_per_page, items_per_page)
 
         logger.info(f"Returning {len(results)} results out of {total}")
         return PaginatedResponse(

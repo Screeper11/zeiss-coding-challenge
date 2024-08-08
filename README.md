@@ -50,6 +50,7 @@ For detailed API documentation, visit http://localhost:8000/docs after starting 
 ```shell
 pytest backend/tests
 ```
+
 _To run the backend tests make sure the Docker containers are running!_
 
 **Run frontend tests:**

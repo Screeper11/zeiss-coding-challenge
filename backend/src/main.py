@@ -3,20 +3,26 @@ from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
+from sqlalchemy.exc import SQLAlchemyError
 
 from .api import arxiv, queries, results
-from .database import create_tables
-
-
-@asynccontextmanager
-async def lifespan(_app: FastAPI):
-    create_tables()
-    yield
-
+from .database import create_tables, engine
 
 logging.basicConfig(level="INFO")
 logger = logging.getLogger(__name__)
 load_dotenv()
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    try:
+        create_tables()
+    except SQLAlchemyError as e:
+        logger.error(f"Failed to create tables: {str(e)}")
+        raise
+    yield
+    engine.dispose()
+
 
 app = FastAPI(
     title="arXiv API",

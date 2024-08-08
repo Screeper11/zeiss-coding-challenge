@@ -10,16 +10,19 @@ class QueryResponse(BaseModel):
     status: int
     num_results: int
 
+
 class ResultResponse(BaseModel):
     author: str
     title: str
     journal: str
+
 
 class PaginatedResponse(BaseModel):
     total: int
     page: int
     items_per_page: int
     items: List[QueryResponse] | List[ResultResponse]
+
 
 class ArxivSearchParams(BaseModel):
     author: str = ""

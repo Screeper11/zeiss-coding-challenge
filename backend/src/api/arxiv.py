@@ -6,6 +6,7 @@ import requests
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from .utils import get_db
 from ..models import ArxivQuery, ArxivResult
@@ -13,6 +14,13 @@ from ..schemas import ArxivSearchParams
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+def fetch_arxiv_data(url):
+    response = requests.get(url)
+    response.raise_for_status()
+    return response.content
 
 
 @router.post("/arxiv", response_model=dict, tags=["arXiv"])
@@ -35,15 +43,14 @@ async def arxiv_endpoint(params: ArxivSearchParams, db: Session = Depends(get_db
         url = f"{os.getenv('ARXIV_API_URL', 'https://export.arxiv.org/api/query')}?search_query={query}&start=0&max_results={params.max_results}&sortBy=relevance&sortOrder=descending"
 
         logger.info(f"Querying arXiv API with URL: {url}")
-        response = requests.get(url)
-        response.raise_for_status()
 
-        feed = feedparser.parse(response.content)
+        content = fetch_arxiv_data(url)
+        feed = feedparser.parse(content)
         logger.info(f"Received {len(feed.entries)} results from arXiv API")
 
         query = ArxivQuery(
             query=feed.get("feed", {}).get("title", ""),
-            status=response.status_code,
+            status=200,  # Assuming success since we got past the request
             num_results=min(int(feed.get("feed", {}).get("opensearch_totalresults", 0)), 100)
         )
         db.add(query)
@@ -67,7 +74,9 @@ async def arxiv_endpoint(params: ArxivSearchParams, db: Session = Depends(get_db
         raise HTTPException(status_code=503, detail="Error connecting to arXiv API")
     except SQLAlchemyError as error:
         logger.error(f"Database error: {str(error)}")
+        db.rollback()
         raise HTTPException(status_code=500, detail="Database error occurred")
     except Exception as error:
         logger.error(f"Unexpected error in arxiv_endpoint: {str(error)}")
+        db.rollback()
         raise HTTPException(status_code=500, detail="An unexpected error occurred")
