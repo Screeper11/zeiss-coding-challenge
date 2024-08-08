@@ -7,20 +7,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from ..database import SessionLocal
+from .utils import get_db
 from ..models import ArxivQuery, ArxivResult
 from ..schemas import ArxivSearchParams
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 @router.post("/arxiv", response_model=dict, tags=["arXiv"])

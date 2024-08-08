@@ -5,20 +5,12 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from ..database import SessionLocal
+from .utils import get_db
 from ..models import ArxivResult, ArxivQuery
 from ..schemas import PaginatedResponse, ResultResponse
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 @router.get("/results", response_model=PaginatedResponse, tags=["Results"])
