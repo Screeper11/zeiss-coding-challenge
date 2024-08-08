@@ -85,3 +85,10 @@ To set up the development environment:
    uvicorn backend.src.main:app --reload
    python frontend/src/main.py
    ```
+
+## Future Plans
+
+- Enhance database security
+- Secure sensitive information
+- Increase backend test coverage
+- Refine user interface design
