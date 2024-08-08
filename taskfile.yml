@@ -1,0 +1,34 @@
+version: '3'
+
+env:
+  DOCKER_COMPOSE_FILE: docker-compose.yml
+
+tasks:
+  build:
+    desc: Build Docker images
+    cmds:
+      - docker-compose -f {{.DOCKER_COMPOSE_FILE}} build
+
+  test:
+    desc: Run tests
+    cmds:
+      - docker-compose -f {{.DOCKER_COMPOSE_FILE}} run --rm api pytest backend/tests
+      - docker-compose -f {{.DOCKER_COMPOSE_FILE}} run --rm frontend pytest frontend/tests
+
+  deploy:
+    desc: Deploy
+    cmds:
+      - echo "Deploying to development environment..."
+      - docker-compose -f {{.DOCKER_COMPOSE_FILE}} up -d
+
+  cleanup:
+    desc: Clean up Docker resources
+    cmds:
+      - docker-compose -f {{.DOCKER_COMPOSE_FILE}} down --remove-orphans
+
+  full-pipeline:
+    desc: Run the full deployment pipeline
+    cmds:
+      - task: build
+      - task: test
+      - task: deploy
