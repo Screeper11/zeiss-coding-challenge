@@ -14,23 +14,25 @@ consists of a backend API built with FastAPI, a PostgreSQL database, and a front
 
 ## Tech Stack
 
-- Backend: FastAPI, SQLAlchemy, PostgreSQL
-- Frontend: React, HTMX
-- DevOps: Docker, docker-compose
+- **Backend:** FastAPI
+- **Database:** PostgreSQL
+- **Frontend:** FastHTML
+- **DevOps:** Docker
+- **Deployment:** Azure
 
 ## Setup and Installation
 
-1. Prerequisites:
+1. **Prerequisites:**
     - Python 3.9+
-    - Docker and Docker Compose
     - Poetry
+    - Docker and Docker Compose
 
-2. Build and run the Docker containers:
+2. **Build and run the Docker containers:**
    ```shell
    docker-compose up --build
    ```
 
-3. Access the application:
+3. **Access the application:**
     - http://localhost:5001
 
 ## API Endpoints
@@ -43,14 +45,15 @@ For detailed API documentation, visit http://localhost:8000/docs after starting 
 
 ## Running Tests
 
-To run the backend tests:
+**Run backend tests:**
 
 ```shell
-docker-compose run api pytest
+pytest backend/tests
 ```
+_To run the backend tests make sure the Docker containers are running!_
 
-To run the frontend tests:
+**Run frontend tests:**
 
 ```shell
-docker-compose run frontend pytest
+pytest frontend/tests
 ```
