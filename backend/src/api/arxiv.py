@@ -1,5 +1,6 @@
 import logging
 import os
+from urllib.parse import urlencode
 
 import feedparser
 import requests
@@ -40,7 +41,17 @@ async def arxiv_endpoint(params: ArxivSearchParams, db: Session = Depends(get_db
             query_parts.append(f"jr:{params.journal}")
 
         query = "+AND+".join(query_parts)
-        url = f"{os.getenv('ARXIV_API_URL', 'https://export.arxiv.org/api/query')}?search_query={query}&start=0&max_results={params.max_results}&sortBy=relevance&sortOrder=descending"
+
+        query_params = {
+            'search_query': query,
+            'start': 0,
+            'max_results': params.max_results,
+            'sortBy': 'relevance',
+            'sortOrder': 'descending'
+        }
+
+        base_url = os.getenv('ARXIV_API_URL', 'https://export.arxiv.org/api/query')
+        url = f"{base_url}?{urlencode(query_params)}"
 
         logger.info(f"Querying arXiv API with URL: {url}")
 
