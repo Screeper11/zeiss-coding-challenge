@@ -2,15 +2,6 @@ import pytest
 from playwright.sync_api import Page, expect
 
 
-@pytest.fixture(scope="module", autouse=True)
-def before_module():
-    # Start the frontend server before running tests
-    import subprocess
-    process = subprocess.Popen(["python", "frontend/src/main.py"])
-    yield
-    process.terminate()
-
-
 @pytest.fixture(scope="function", autouse=True)
 def before_each_after_each(page: Page):
     page.goto("http://localhost:5001")

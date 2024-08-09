@@ -39,11 +39,11 @@ async def queries_endpoint(
             query = query.filter(ArxivQuery.timestamp <= query_end_time)
 
         total = query.count()
-        results = fetch_queries(db, query_start_time, query_end_time, page * items_per_page, items_per_page)
+        results = query.order_by(ArxivQuery.timestamp.desc()).offset(page * items_per_page).limit(items_per_page).all()
 
         logger.info(f"Returning {len(results)} queries out of {total}")
         return PaginatedResponse(
-            total=min(total, 100),  # Limit total to 100
+            total=min(total, 100),
             page=page,
             items_per_page=items_per_page,
             items=[QueryResponse(

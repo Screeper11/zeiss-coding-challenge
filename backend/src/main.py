@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from sqlalchemy.exc import SQLAlchemyError
 
 from .api import arxiv, queries, results
-from .database import create_tables, engine
+from .database import Base, engine
 
 logging.basicConfig(level="INFO")
 logger = logging.getLogger(__name__)
@@ -16,7 +16,7 @@ load_dotenv()
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     try:
-        create_tables()
+        Base.metadata.create_all(bind=engine)
     except SQLAlchemyError as e:
         logger.error(f"Failed to create tables: {str(e)}")
         raise

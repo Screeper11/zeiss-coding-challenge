@@ -44,7 +44,7 @@ async def results_endpoint(
 
         logger.info(f"Returning {len(results)} results out of {total}")
         return PaginatedResponse(
-            total=min(total, 100),  # Limit total to 100
+            total=min(total, 100),
             page=page,
             items_per_page=items_per_page,
             items=[ResultResponse(

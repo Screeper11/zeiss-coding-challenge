@@ -31,7 +31,6 @@ The application is hosted and accessible at [zeiss.screeper.dev](https://zeiss.s
     - Poetry
     - Docker and Docker Compose
 
-
 2. **Build and run the Docker containers:**
    ```shell
    docker-compose up --build
@@ -47,8 +46,6 @@ The application is hosted and accessible at [zeiss.screeper.dev](https://zeiss.s
 - `POST /arxiv`: Search arXiv and store results
 - `GET /queries`: Retrieve past queries
 - `GET /results`: Get stored search results
-
-For detailed API documentation, visit [zeiss.screeper.dev/docs](https://zeiss.screeper.dev/docs).
 
 ## Running Tests
 
